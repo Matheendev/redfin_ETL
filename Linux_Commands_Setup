@@ -17,3 +17,9 @@ airflow version
 python3 --version
 aws configure
 airflow standalone
+
+# To restart the dag
+
+airflow webserver -D
+airflow scheduler -D
+
