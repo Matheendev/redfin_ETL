@@ -9,20 +9,21 @@ from airflow.providers.amazon.aws.transfers.s3_to_redshift import S3ToRedshiftOp
 s3_client = boto3.client('s3')
 
 # s3 buckets
-raw_bucket_name = 'redfinrawbucket'
-transform_bucket_name = 'redfinbucket'
+raw_bucket_name = 'redfinrawb'
+transform_bucket_name = 'redfintranb'
 
 # url link from - https://www.redfin.com/news/data-center/
 url_by_city = 'https://redfin-public-data.s3.us-west-2.amazonaws.com/redfin_market_tracker/city_market_tracker.tsv000.gz'
 
 def extract_data(**kwargs):
     url = kwargs['url']
-    df = pd.read_csv(url, compression='gzip', sep='\t')
+    # Read only the first 20,000 rows
+    df = pd.read_csv(url, compression='gzip', sep='\t', nrows=5000)
     now = datetime.now()
     date_now_string = now.strftime("%d%m%Y%H%M%S")
     file_str = 'redfin_data_' + date_now_string
-    df.to_csv(f"{file_str}.csv", index=False)
     output_file_path = f"/home/ubuntu/{file_str}.csv"
+    df.to_csv(output_file_path, index=False)
     output_list = [output_file_path, file_str]
 
     # Upload raw data to S3 raw bucket
@@ -125,13 +126,13 @@ with DAG('redfin_analytics_dag',
 
     load_to_s3 = BashOperator(
         task_id = 'tsk_load_to_s3',
-        bash_command = 'aws s3 mv {{ ti.xcom_pull("tsk_transform_redfin_data") }} s3://redfinbucket',
+        bash_command = 'aws s3 mv {{ ti.xcom_pull("tsk_transform_redfin_data") }} s3://redfintranb',
     )
 
     transfer_s3_to_redshift = S3ToRedshiftOperator(
     task_id="tsk_transfer_s3_to_redshift",
-    aws_conn_id='aws_s3_conn',
-    redshift_conn_id='conn_id_redshift',
+    aws_conn_id='aws_conn_id',
+    redshift_conn_id='aws_conn_id',
     s3_bucket= transform_bucket_name,
     s3_key='{{ ti.xcom_pull(task_ids="tsk_transform_redfin_data").split("/")[-1] }}',
     schema="PUBLIC",
